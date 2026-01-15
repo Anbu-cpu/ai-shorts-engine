@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+yt-dlp
+openai
+ffmpeg-python
+google-api-python-client
+whisper
