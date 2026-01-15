@@ -1,47 +1,45 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 import subprocess, os, uuid
 import openai
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 app = FastAPI()
 
 openai.api_key = os.getenv("OPENAI_KEY")
 
-def download(url):
-    out = f"video_{uuid.uuid4()}.mp4"
-    subprocess.run(["yt-dlp", "-o", out, url])
-    return out
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
-def transcribe(video):
-    subprocess.run(["whisper", video, "--model", "base"])
-    return video.replace(".mp4", ".txt")
+REDIRECT_URI = "https://ai-shorts-engine-7.onrender.com/oauth2callback"
 
-def find_clips(text):
-    prompt = "Find 3 viral short segments from this transcript. Format: start,end,title\n" + text
-    r = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role":"user","content":prompt}]
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+@app.get("/")
+def home():
+    return {"status": "AI Shorts Engine is running"}
+
+@app.get("/login")
+def login():
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [REDIRECT_URI]
+            }
+        },
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
     )
-    return r.choices[0].message.content.split("\n")
 
-def cut(video, clips):
-    out = []
-    for c in clips:
-        s,e,t = c.split(",")
-        name = f"clip_{uuid.uuid4()}.mp4"
-        subprocess.run([
-            "ffmpeg","-i",video,
-            "-ss",s,"-to",e,
-            "-vf","scale=1080:1920",
-            name
-        ])
-        out.append((name,t))
-    return out
+    auth_url, _ = flow.authorization_url(prompt="consent")
+    return RedirectResponse(auth_url)
 
-@app.post("/create")
-def create(data:dict):
-    video = download(data["url"])
-    txt = transcribe(video)
-    text = open(txt).read()
-    segments = find_clips(text)
-    clips = cut(video, segments)
-    return {"clips":[{"title":t,"file":f} for f,t in clips]}
+@app.get("/oauth2callback")
+def callback(request: Request):
+    return {"status": "YouTube connected successfully"}
