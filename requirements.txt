@@ -2,5 +2,7 @@ fastapi
 uvicorn
 yt-dlp
 openai
+whisper
 ffmpeg-python
-python-multipart
+google-api-python-client
+google-auth-oauthlib
